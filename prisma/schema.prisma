@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum Role {
+  RIDER
+  ATTENDANT
+  ADMIN
+}
+
+enum TagStatus {
+  ACTIVE
+  BLOCKED
+  LOST
+}
+
+enum ParkingStatus {
+  OPEN
+  CLOSED
+}
+
+enum CheckMethod {
+  RFID
+  MANUAL
+  QR
+  SELF
+}
+
+enum ViolationType {
+  WRONG_ZONE
+  BLOCK_RULE
+  UNOFFICIAL_PARKING
+  OVERSTAY
+  TAG_MISMATCH
+  OTHER
+}
+
+enum ViolationStatus {
+  OPEN
+  RESOLVED
+  FINED
+}
+
+/// public, day scholar, hostel boys/girls, faculty/staff, VIP/operational
+model PermitCategory {
+  id          Int          @id @default(autoincrement())
+  code        String       @unique
+  name        String
+  users       User[]
+  zoneAccess  ZoneAccess[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  regNo         String?   @unique // university registration number
+  email         String?   @unique
+  name          String
+  passwordHash  String
+  role          Role      @default(RIDER)
+  categoryId    Int?
+  category      PermitCategory? @relation(fields: [categoryId], references: [id])
+  /// Business Block rule: highest block number this user may park in (null = no limit)
+  maxBlock      Int?
+  createdAt     DateTime  @default(now())
+
+  vehicles      Vehicle[]
+  violations    Violation[] @relation("ViolationUser")
+  reported      Violation[] @relation("ViolationReporter")
+  auditLogs     AuditLog[]
+}
+
+model Vehicle {
+  id        String   @id @default(cuid())
+  plateNo   String   @unique
+  model     String?
+  colour    String?
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id])
+  tags      RfidTag[]
+  records   ParkingRecord[]
+  createdAt DateTime @default(now())
+}
+
+model RfidTag {
+  id        String    @id @default(cuid())
+  uid       String    @unique
+  status    TagStatus @default(ACTIVE)
+  vehicleId String?
+  vehicle   Vehicle?  @relation(fields: [vehicleId], references: [id])
+  createdAt DateTime  @default(now())
+}
+
+model Block {
+  id     Int    @id @default(autoincrement())
+  number Int    @unique // used for the Business Block rule ordering
+  name   String
+  zones  Zone[]
+}
+
+model Lot {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  zones Zone[]
+}
+
+model Zone {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  lotId       Int?
+  lot         Lot?     @relation(fields: [lotId], references: [id])
+  blockId     Int?
+  block       Block?   @relation(fields: [blockId], references: [id])
+  /// Nullable until LPU confirms real numbers
+  capacity    Int?
+  lat         Float?
+  lng         Float?
+  isVerified  Boolean  @default(false)
+  dataSource  String   @default("google-research")
+  isActive    Boolean  @default(true)
+
+  access      ZoneAccess[]
+  records     ParkingRecord[]
+  violations  Violation[]
+}
+
+model ZoneAccess {
+  zoneId     Int
+  categoryId Int
+  zone       Zone           @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  category   PermitCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([zoneId, categoryId])
+}
+
+/// Links Module 2 (allocation) to Module 3 (retrieval/security).
+/// Occupancy = capacity - count(status = OPEN) per zone.
+/// Raw SQL migration adds: UNIQUE (vehicleId) WHERE status = 'OPEN'
+model ParkingRecord {
+  id          String        @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id])
+  zoneId      Int
+  zone        Zone          @relation(fields: [zoneId], references: [id])
+  status      ParkingStatus @default(OPEN)
+  method      CheckMethod
+  note        String?
+  checkInAt   DateTime      @default(now())
+  checkOutAt  DateTime?
+  violations  Violation[]
+
+  @@index([zoneId, status])
+  @@index([vehicleId, status])
+}
+
+model Violation {
+  id          String          @id @default(cuid())
+  type        ViolationType
+  status      ViolationStatus @default(OPEN)
+  fineAmount  Int?
+  details     String?
+  userId      String?
+  user        User?           @relation("ViolationUser", fields: [userId], references: [id])
+  reporterId  String?
+  reporter    User?           @relation("ViolationReporter", fields: [reporterId], references: [id])
+  zoneId      Int?
+  zone        Zone?           @relation(fields: [zoneId], references: [id])
+  recordId    String?
+  record      ParkingRecord?  @relation(fields: [recordId], references: [id])
+  createdAt   DateTime        @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+}
