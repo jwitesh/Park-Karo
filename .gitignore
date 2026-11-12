@@ -40,3 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .neon
+
+# keep the documented example env file in git
+!.env.example
+
+.vercel
+.env*
