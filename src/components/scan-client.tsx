@@ -17,6 +17,8 @@ const inputCls =
 export default function ScanClient({ zones, demoTags, recent }: Props) {
   const [mode, setMode] = useState<"rfid" | "manual">("rfid");
   const [tagUid, setTagUid] = useState("");
+  // Controlled so the guard's gate/zone survives the form reset React does after every submit.
+  const [zoneId, setZoneId] = useState("");
   const [result, action, pending] = useActionState(scanAction, null);
 
   const tone = !result ? null : !result.ok ? "error" : result.code === "CHECKED_IN_FLAGGED" ? "warn" : "ok";
@@ -46,12 +48,12 @@ export default function ScanClient({ zones, demoTags, recent }: Props) {
         ))}
       </div>
 
-      <form action={action} className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <input type="hidden" name="mode" value={mode} />
-
+      <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+        {/* Outside the <form> on purpose: React resets every field inside a form after each submit,
+            but the guard stays at one gate, so the chosen zone must survive. It is sent via the hidden input. */}
         <label className="block space-y-1 text-sm font-medium">
           Zone
-          <select name="zoneId" required className={inputCls} defaultValue="">
+          <select className={inputCls} value={zoneId} onChange={(e) => setZoneId(e.target.value)}>
             <option value="" disabled>
               Select the zone you are at…
             </option>
@@ -62,6 +64,11 @@ export default function ScanClient({ zones, demoTags, recent }: Props) {
             ))}
           </select>
         </label>
+
+        {/* key={mode}: each mode gets fresh inputs, so text typed in one mode never leaks into the other. */}
+        <form key={mode} action={action} className="space-y-3">
+        <input type="hidden" name="mode" value={mode} />
+        <input type="hidden" name="zoneId" value={zoneId} />
 
         {mode === "rfid" ? (
           <>
@@ -82,7 +89,7 @@ export default function ScanClient({ zones, demoTags, recent }: Props) {
                   key={t.uid}
                   type="button"
                   onClick={() => setTagUid(t.uid)}
-                  className="rounded-full border border-border px-2.5 py-1 hover:bg-background"
+                  className="rounded-full border border-border px-3 py-2 hover:bg-background sm:py-1"
                 >
                   {t.uid} · {t.plateNo}
                 </button>
@@ -96,7 +103,7 @@ export default function ScanClient({ zones, demoTags, recent }: Props) {
                 <option value="OUT">Exit</option>
               </select>
             </label>
-            <SubmitButton pending={pending} label="Simulate scan" />
+            <SubmitButton pending={pending} disabled={!zoneId} label="Simulate scan" />
           </>
         ) : (
           <>
@@ -105,18 +112,20 @@ export default function ScanClient({ zones, demoTags, recent }: Props) {
               <input name="plateNo" required placeholder="e.g. PB08AA0001" className={inputCls} />
             </label>
             <div className="flex gap-2">
-              <SubmitButton pending={pending} label="Check in" name="direction" value="IN" />
-              <SubmitButton pending={pending} label="Check out" name="direction" value="OUT" variant="secondary" />
+              <SubmitButton pending={pending} disabled={!zoneId} label="Check in" name="direction" value="IN" />
+              <SubmitButton pending={pending} disabled={!zoneId} label="Check out" name="direction" value="OUT" variant="secondary" />
             </div>
           </>
         )}
-      </form>
+        </form>
+        {!zoneId && <p className="text-xs text-muted">Choose your zone to enable scanning.</p>}
+      </div>
 
       {result && (
         <div
           role="status"
           className={cn(
-            "flex items-start gap-3 rounded-xl border p-4 text-sm",
+            "flex animate-scale-in items-start gap-3 rounded-2xl border p-4 text-sm shadow-sm",
             tone === "ok" && "border-green-300 bg-green-50 text-green-900",
             tone === "warn" && "border-amber-300 bg-amber-50 text-amber-900",
             tone === "error" && "border-red-300 bg-red-50 text-red-900",
@@ -166,8 +175,10 @@ function SubmitButton({
   name,
   value,
   variant = "primary",
+  disabled = false,
 }: {
   pending: boolean;
+  disabled?: boolean;
   label: string;
   name?: string;
   value?: string;
@@ -177,10 +188,10 @@ function SubmitButton({
     <button
       name={name}
       value={value}
-      disabled={pending}
+      disabled={pending || disabled}
       className={cn(
         "flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-60",
-        variant === "primary" ? "w-full bg-brand-dark text-white" : "flex-1 border border-border bg-background",
+        variant === "primary" ? "btn-grad w-full" : "flex-1 border border-border bg-background",
         name && variant === "primary" && "flex-1 w-auto",
       )}
     >

@@ -1,6 +1,7 @@
 import { Prisma, type CheckMethod } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkAccess } from "@/lib/zones";
+import { notify, staffIds, violationLabel } from "@/lib/notify";
 
 export type ResultCode =
   | "CHECKED_IN"
@@ -68,8 +69,9 @@ export async function checkInVehicle(p: {
         };
       }
 
+      let occupied = 0;
       if (zone.capacity != null) {
-        const occupied = await tx.parkingRecord.count({ where: { zoneId: zone.id, status: "OPEN" } });
+        occupied = await tx.parkingRecord.count({ where: { zoneId: zone.id, status: "OPEN" } });
         if (occupied >= zone.capacity) {
           return {
             ok: false,
@@ -100,6 +102,22 @@ export async function checkInVehicle(p: {
             zoneId: zone.id,
             recordId: record.id,
           },
+        });
+        await notify(tx, [vehicle.ownerId], {
+          type: "VIOLATION",
+          title: `${violationLabel(access.violation)} recorded`,
+          body: `${vehicle.plateNo} was parked in ${zone.name}. ${access.reason ?? ""}`.trim(),
+          link: "/my-parking",
+        });
+      }
+
+      // This entry just filled the zone: tell the staff once (only on the transition to full).
+      if (zone.capacity != null && occupied + 1 === zone.capacity) {
+        await notify(tx, await staffIds(tx), {
+          type: "ZONE_FULL",
+          title: `${zone.name} is now full`,
+          body: `${zone.capacity} of ${zone.capacity} spaces are taken.`,
+          link: `/discover/${zone.id}`,
         });
       }
 
@@ -220,6 +238,12 @@ export async function processScan(p: {
           reporterId: p.actorId,
           zoneId: p.zoneId,
         },
+      });
+      await notify(prisma, [tag.vehicle.ownerId], {
+        type: "VIOLATION",
+        title: "Blocked tag was scanned",
+        body: `Your ${tag.status.toLowerCase()} tag ${tag.uid} was used at a gate and entry was refused.`,
+        link: "/my-parking",
       });
     }
     return {

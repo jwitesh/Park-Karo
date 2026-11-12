@@ -29,7 +29,7 @@ const inputCls =
 function Msg({ s }: { s: ActionState }) {
   if (!s) return null;
   return (
-    <p role="status" className={cn("text-sm", s.ok ? "text-green-700" : "text-red-600")}>
+    <p role="status" className={cn("animate-slide-down text-sm", s.ok ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
       {s.message}
     </p>
   );
@@ -70,7 +70,7 @@ export default function ViolationsClient({ rows, zones }: { rows: Row[]; zones: 
             <textarea name="details" required minLength={5} maxLength={500} rows={2} placeholder="What happened?" className={inputCls} />
             <button
               disabled={logPending}
-              className="flex items-center gap-2 rounded-lg bg-brand-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg btn-grad px-4 py-2 text-sm font-semibold disabled:opacity-60"
             >
               <Spinner on={logPending} /> Log violation
             </button>

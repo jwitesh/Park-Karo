@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePlate } from "@/lib/parking";
 import { detectOverstays } from "@/lib/overstay";
+import { notify, violationLabel } from "@/lib/notify";
 
 export type ActionState = { ok: boolean; message: string } | null;
 
@@ -52,6 +53,12 @@ export async function logViolation(_prev: ActionState, formData: FormData): Prom
   await prisma.auditLog.create({
     data: { actorId: actor, action: "LOG_VIOLATION", entity: "Violation", entityId: v.id, meta: { plateNo } },
   });
+  await notify(prisma, [vehicle?.ownerId], {
+    type: "VIOLATION",
+    title: `${violationLabel(parsed.data.type)} recorded`,
+    body: `A violation was logged against ${plateNo}: ${parsed.data.details}`,
+    link: "/my-parking",
+  });
 
   revalidatePath("/violations");
   return {
@@ -70,6 +77,14 @@ export async function resolveViolation(_prev: ActionState, formData: FormData): 
     data: { status: "RESOLVED", resolvedAt: new Date() },
   });
   if (!res.count) return { ok: false, message: "Violation is no longer open" };
+
+  const v = await prisma.violation.findUnique({ where: { id }, select: { userId: true, type: true } });
+  await notify(prisma, [v?.userId], {
+    type: "VIOLATION_UPDATE",
+    title: "Violation resolved",
+    body: `Your ${violationLabel(v?.type ?? "OTHER").toLowerCase()} violation was resolved. No fine applies.`,
+    link: "/my-parking",
+  });
 
   await prisma.auditLog.create({ data: { actorId: actor, action: "RESOLVE_VIOLATION", entity: "Violation", entityId: id } });
   revalidatePath("/violations");
@@ -90,6 +105,14 @@ export async function fineViolation(_prev: ActionState, formData: FormData): Pro
     data: { status: "FINED", fineAmount: parsed.data.amount, resolvedAt: new Date() },
   });
   if (!res.count) return { ok: false, message: "Violation is no longer open" };
+
+  const fined = await prisma.violation.findUnique({ where: { id: parsed.data.id }, select: { userId: true, type: true } });
+  await notify(prisma, [fined?.userId], {
+    type: "VIOLATION_UPDATE",
+    title: `Fine issued: ₹${parsed.data.amount}`,
+    body: `A fine of ₹${parsed.data.amount} was issued for ${violationLabel(fined?.type ?? "OTHER").toLowerCase()}.`,
+    link: "/my-parking",
+  });
 
   await prisma.auditLog.create({
     data: {

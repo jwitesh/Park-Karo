@@ -32,7 +32,7 @@ const card = "rounded-xl border border-border bg-card p-4 shadow-sm";
 function Feedback({ state }: { state: ActionState }) {
   if (!state) return null;
   return (
-    <p role="status" className={cn("text-sm", state.ok ? "text-green-700" : "text-red-600")}>
+    <p role="status" className={cn("animate-slide-down text-sm", state.ok ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
       {state.message}
     </p>
   );
@@ -44,7 +44,7 @@ function Btn({ pending, children, secondary }: { pending: boolean; children: Rea
       disabled={pending}
       className={cn(
         "flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60",
-        secondary ? "border border-border bg-background" : "bg-brand-dark text-white",
+        secondary ? "border border-border bg-background" : "btn-grad",
       )}
     >
       {pending && <Loader2 className="h-4 w-4 animate-spin" />} {children}

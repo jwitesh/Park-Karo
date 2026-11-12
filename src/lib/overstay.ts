@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { notify } from "@/lib/notify";
 
 /**
  * Overstay / overnight policy (defaults for the demo, adjust to LPU's real rules):
@@ -50,6 +51,12 @@ export async function detectOverstays(actorId: string | null, now = new Date()):
         zoneId: r.zoneId,
         recordId: r.id,
       },
+    });
+    await notify(prisma, [r.vehicle.ownerId], {
+      type: "VIOLATION",
+      title: "Overstay recorded",
+      body: `${r.vehicle.plateNo} in ${r.zone.name}: ${reason}`,
+      link: "/my-parking",
     });
     created++;
   }

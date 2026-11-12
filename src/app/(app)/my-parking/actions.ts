@@ -5,6 +5,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { checkInVehicle, checkOutVehicle, normalizePlate } from "@/lib/parking";
+import { notify } from "@/lib/notify";
 
 export type ActionState = { ok: boolean; message: string } | null;
 
@@ -98,6 +99,16 @@ export async function reportViolation(_prev: ActionState, formData: FormData): P
   await prisma.auditLog.create({
     data: { actorId: userId, action: "REPORT_VIOLATION", entity: "Violation", entityId: violation.id, meta: { plateNo } },
   });
+
+  // Tell the owner of the reported vehicle (unless someone reported their own bike)
+  if (vehicle && vehicle.ownerId !== userId) {
+    await notify(prisma, [vehicle.ownerId], {
+      type: "VIOLATION",
+      title: "Your vehicle was reported",
+      body: `${plateNo} was reported for unofficial or wrong parking. Security will review it.`,
+      link: "/my-parking",
+    });
+  }
 
   revalidatePath("/my-parking");
   return { ok: true, message: "Report submitted. Security will review it." };
